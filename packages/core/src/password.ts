@@ -44,7 +44,8 @@ function owaspMinimumMemoryCost(timeCost: number): number {
   return 7_168;
 }
 
-function resolveHashOptions(options: HashOptions = {}): Required<HashOptions> {
+/** Fills in defaults and enforces the OWASP minimums. Internal: not exported from the package. */
+export function resolveHashOptions(options: HashOptions = {}): Required<HashOptions> {
   const resolved = { ...ARGON2ID_DEFAULTS, ...options };
   const { memoryCost, timeCost, parallelism } = resolved;
 
@@ -107,6 +108,19 @@ function assertPasswordPolicy(password: unknown): asserts password is string {
 export async function hashPassword(plain: string, options?: HashOptions): Promise<string> {
   const params = resolveHashOptions(options);
   assertPasswordPolicy(plain);
+  return argon2id(plain, params);
+}
+
+/**
+ * Re-hashes a password that has just been verified, skipping the policy check. Internal: not
+ * exported from the package. Without this, raising the minimum length would lock out users
+ * whose older, shorter password triggers a rehash on login.
+ */
+export async function rehashPassword(plain: string, options?: HashOptions): Promise<string> {
+  return argon2id(plain, resolveHashOptions(options));
+}
+
+function argon2id(plain: string, params: Required<HashOptions>): Promise<string> {
   return hash(normalizePassword(plain), {
     ...params,
     algorithm: ARGON2ID,

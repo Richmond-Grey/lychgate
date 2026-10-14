@@ -16,6 +16,7 @@ export function memoryAdapter(): Adapter {
   const userIdByEmail = new Map<string, string>();
   const tokens = new Map<string, RefreshTokenRecord>();
   const tokenIdByHash = new Map<string, string>();
+  const revokedFamilies = new Set<string>();
 
   const copy = <T>(value: T): T => structuredClone(value);
   const copyOrNull = <T>(value: T | undefined): T | null => (value ? copy(value) : null);
@@ -94,20 +95,26 @@ export function memoryAdapter(): Adapter {
       return id === undefined ? null : copyOrNull(tokens.get(id));
     },
 
-    async revokeRefreshToken(id, options = {}) {
+    async revokeRefreshToken(id, input) {
       const token = tokens.get(id);
       // Compare-and-set: only an active token can be revoked, and only once.
       if (!token || token.revokedAt !== null) return false;
-      token.revokedAt = new Date();
-      token.replacedById = options.replacedById ?? null;
+      token.revokedAt = new Date(input.revokedAt);
+      token.replacedById = input.replacedById ?? null;
       return true;
     },
 
-    async revokeFamily(familyId) {
-      const now = new Date();
+    async revokeFamily(familyId, revokedAt) {
+      revokedFamilies.add(familyId);
       for (const token of tokens.values()) {
-        if (token.familyId === familyId && token.revokedAt === null) token.revokedAt = now;
+        if (token.familyId === familyId && token.revokedAt === null) {
+          token.revokedAt = new Date(revokedAt);
+        }
       }
+    },
+
+    async isFamilyRevoked(familyId) {
+      return revokedFamilies.has(familyId);
     },
   };
 }

@@ -4,12 +4,18 @@
  * Framework- and storage-agnostic authentication core. Everything exported here is public API.
  */
 
+export { createAuth } from './auth.js';
+export type { Auth, AuthSession, Credentials, PublicUser } from './auth.js';
+export type { AuthConfig } from './config.js';
+export type { Duration } from './duration.js';
+export type { AccessTokenClaims } from './tokens/access-token.js';
+
 export type { RefreshTokenRecord, User } from './types.js';
 export type {
   Adapter,
   CreateRefreshTokenInput,
   CreateUserInput,
-  RevokeRefreshTokenOptions,
+  RevokeRefreshTokenInput,
   UpdateUserInput,
 } from './adapter.js';
 export { memoryAdapter } from './adapters/memory.js';

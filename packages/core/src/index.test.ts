@@ -11,6 +11,7 @@ describe('@lychgate/core public API', () => {
       'PASSWORD_MAX_LENGTH',
       'PASSWORD_MIN_LENGTH',
       'PasswordPolicyError',
+      'createAuth',
       'hashPassword',
       'isLychgateError',
       'memoryAdapter',

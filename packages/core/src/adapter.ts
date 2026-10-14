@@ -3,7 +3,12 @@ import type { RefreshTokenRecord, User } from './types.js';
 /*
  * Lychgate core generates record IDs (crypto.randomUUID()) and passes them in, so every adapter
  * produces the same ID format and core can know a token's ID before it is stored (needed to
- * rotate atomically). Adapters set the timestamps (`createdAt`, `updatedAt`).
+ * rotate atomically).
+ *
+ * Timestamps that security decisions depend on (`expiresAt`, `revokedAt`) are also passed in by
+ * core, from its single (injectable) clock, so they are never compared against a different
+ * clock such as the database server's. Adapters only set the bookkeeping timestamps
+ * `createdAt` and `updatedAt`.
  */
 
 export interface CreateUserInput {
@@ -24,7 +29,8 @@ export interface CreateRefreshTokenInput {
   expiresAt: Date;
 }
 
-export interface RevokeRefreshTokenOptions {
+export interface RevokeRefreshTokenInput {
+  revokedAt: Date;
   /** Set when revoking because of rotation: the ID of the replacement token. */
   replacedById?: string;
 }
@@ -61,7 +67,18 @@ export interface Adapter {
    * This is what makes rotation race-safe: if two requests present the same refresh token at
    * the same time, only one of them wins. The other is treated as reuse.
    */
-  revokeRefreshToken(id: string, options?: RevokeRefreshTokenOptions): Promise<boolean>;
-  /** Revokes every still-active token in the family. Already-revoked tokens keep their `revokedAt`. */
-  revokeFamily(familyId: string): Promise<void>;
+  revokeRefreshToken(id: string, input: RevokeRefreshTokenInput): Promise<boolean>;
+  /**
+   * Revokes the family: sets `revokedAt` on every still-active token in it (already-revoked
+   * tokens keep theirs) AND records the family itself as revoked, permanently.
+   */
+  revokeFamily(familyId: string, revokedAt: Date): Promise<void>;
+  /**
+   * Whether `revokeFamily` has ever been called for this family.
+   *
+   * Revoking existing tokens isn't enough on its own: a concurrent refresh may create a new
+   * token in the family just *after* the revocation ran. Core checks this marker every time a
+   * refresh token is used, so such a token is rejected on first use.
+   */
+  isFamilyRevoked(familyId: string): Promise<boolean>;
 }

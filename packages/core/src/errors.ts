@@ -2,7 +2,22 @@
  * Every error Lychgate throws on purpose carries a stable `code`.
  * Match on the code, never on the message: messages are for humans and may change.
  */
-export type LychgateErrorCode = 'EMAIL_TAKEN' | 'INVALID_PASSWORD_POLICY' | 'INVALID_HASH_OPTIONS';
+export type LychgateErrorCode =
+  // Configuration (programmer errors, thrown at startup)
+  | 'INVALID_CONFIG'
+  | 'INVALID_HASH_OPTIONS'
+  // Registration
+  | 'INVALID_EMAIL'
+  | 'INVALID_PASSWORD_POLICY'
+  | 'EMAIL_TAKEN'
+  // Login
+  | 'INVALID_CREDENTIALS'
+  // Tokens
+  | 'INVALID_ACCESS_TOKEN'
+  | 'ACCESS_TOKEN_EXPIRED'
+  | 'INVALID_REFRESH_TOKEN'
+  | 'REFRESH_TOKEN_EXPIRED'
+  | 'REFRESH_TOKEN_REUSED';
 
 // A global symbol (Symbol.for) is shared across module copies. If an app ends up loading both the
 // ESM and CJS builds of this package, `instanceof` fails across them, but this brand still matches.

@@ -7,6 +7,8 @@ import { isLychgateError } from '../errors.js';
 export type AdapterFactory = () => Adapter | Promise<Adapter>;
 
 const HOUR_MS = 60 * 60 * 1000;
+const T1 = new Date('2030-01-01T00:00:00.000Z');
+const T2 = new Date('2030-01-01T00:05:00.000Z');
 
 function userInput(overrides: Partial<CreateUserInput> = {}): CreateUserInput {
   return {
@@ -176,47 +178,69 @@ export function runAdapterContractTests(factory: AdapterFactory): void {
         expect(await adapter.findRefreshTokenByHash('unknown')).toBeNull();
       });
 
-      it('revokes an active token exactly once, recording its replacement', async () => {
+      it('revokes an active token exactly once, storing the given time and replacement', async () => {
         const token = await adapter.createRefreshToken(tokenInput(await createUserId()));
         const replacedById = randomUUID();
 
-        expect(await adapter.revokeRefreshToken(token.id, { replacedById })).toBe(true);
-        expect(await adapter.revokeRefreshToken(token.id)).toBe(false);
+        expect(await adapter.revokeRefreshToken(token.id, { revokedAt: T1, replacedById })).toBe(
+          true,
+        );
+        expect(await adapter.revokeRefreshToken(token.id, { revokedAt: T2 })).toBe(false);
 
         const stored = await adapter.findRefreshTokenByHash(token.tokenHash);
-        expect(stored?.revokedAt).toBeInstanceOf(Date);
+        expect(stored?.revokedAt).toEqual(T1);
         expect(stored?.replacedById).toBe(replacedById);
+      });
+
+      it('stores replacedById as null when revoking without a replacement', async () => {
+        const token = await adapter.createRefreshToken(tokenInput(await createUserId()));
+        await adapter.revokeRefreshToken(token.id, { revokedAt: T1 });
+
+        expect((await adapter.findRefreshTokenByHash(token.tokenHash))?.replacedById).toBeNull();
       });
 
       it('lets exactly one of two concurrent revocations win', async () => {
         const token = await adapter.createRefreshToken(tokenInput(await createUserId()));
         const results = await Promise.all([
-          adapter.revokeRefreshToken(token.id, { replacedById: randomUUID() }),
-          adapter.revokeRefreshToken(token.id, { replacedById: randomUUID() }),
+          adapter.revokeRefreshToken(token.id, { revokedAt: T1, replacedById: randomUUID() }),
+          adapter.revokeRefreshToken(token.id, { revokedAt: T1, replacedById: randomUUID() }),
         ]);
         expect(results.filter(Boolean)).toHaveLength(1);
       });
 
       it('returns false when revoking an unknown token', async () => {
-        expect(await adapter.revokeRefreshToken(randomUUID())).toBe(false);
+        expect(await adapter.revokeRefreshToken(randomUUID(), { revokedAt: T1 })).toBe(false);
       });
 
-      it('revokes a whole family, and only that family', async () => {
+      it('revokes a whole family, and only that family, keeping earlier revocation times', async () => {
         const userId = await createUserId();
         const familyId = randomUUID();
         const first = await adapter.createRefreshToken(tokenInput(userId, { familyId }));
         const second = await adapter.createRefreshToken(tokenInput(userId, { familyId }));
         const other = await adapter.createRefreshToken(tokenInput(userId));
 
-        await adapter.revokeRefreshToken(first.id, { replacedById: second.id });
-        const firstRevokedAt = (await adapter.findRefreshTokenByHash(first.tokenHash))?.revokedAt;
-
-        await adapter.revokeFamily(familyId);
+        await adapter.revokeRefreshToken(first.id, { revokedAt: T1, replacedById: second.id });
+        await adapter.revokeFamily(familyId, T2);
 
         const find = (hash: string) => adapter.findRefreshTokenByHash(hash);
-        expect((await find(second.tokenHash))?.revokedAt).toBeInstanceOf(Date);
-        expect((await find(first.tokenHash))?.revokedAt).toEqual(firstRevokedAt);
+        expect((await find(first.tokenHash))?.revokedAt).toEqual(T1);
+        expect((await find(second.tokenHash))?.revokedAt).toEqual(T2);
         expect((await find(other.tokenHash))?.revokedAt).toBeNull();
+      });
+
+      it('remembers revoked families, even ones with no active tokens at the time', async () => {
+        const userId = await createUserId();
+        const familyId = randomUUID();
+        const otherFamilyId = randomUUID();
+        await adapter.createRefreshToken(tokenInput(userId, { familyId: otherFamilyId }));
+
+        expect(await adapter.isFamilyRevoked(familyId)).toBe(false);
+        await adapter.revokeFamily(familyId, T1);
+        // A token created after the revocation (the concurrent-refresh race) is still caught.
+        await adapter.createRefreshToken(tokenInput(userId, { familyId }));
+
+        expect(await adapter.isFamilyRevoked(familyId)).toBe(true);
+        expect(await adapter.isFamilyRevoked(otherFamilyId)).toBe(false);
       });
 
       it('never hands out references to stored tokens', async () => {
