@@ -1,11 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { VERSION } from './index.js';
+import * as core from './index.js';
 
-describe('@lychgate/core', () => {
-  it('exports a version that matches package.json', async () => {
-    const pkg = (await import('../package.json', { with: { type: 'json' } })) as {
-      default: { version: string };
-    };
-    expect(VERSION).toBe(pkg.default.version);
+describe('@lychgate/core public API', () => {
+  // Guards against accidentally exporting internals. Update deliberately when the API changes.
+  it('exports exactly the intended runtime values', () => {
+    expect(Object.keys(core).sort()).toEqual([
+      'ARGON2ID_DEFAULTS',
+      'EmailTakenError',
+      'LychgateError',
+      'PASSWORD_MAX_LENGTH',
+      'PASSWORD_MIN_LENGTH',
+      'PasswordPolicyError',
+      'hashPassword',
+      'isLychgateError',
+      'memoryAdapter',
+      'needsRehash',
+      'normalizeEmail',
+      'verifyPassword',
+    ]);
   });
 });
