@@ -1,0 +1,7 @@
+packages:
+  - 'packages/*'
+  - 'examples/*'
+
+# Dependency install scripts are blocked by default; allowlist only what we need.
+allowBuilds:
+  esbuild: true
